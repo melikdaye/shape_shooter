@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
         // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(title: 'Shape Shooter'),
     );
   }
 }
@@ -50,22 +50,47 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin{
+class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin{
 
-  late AnimationController _controller;
-  late Animation _animation;
+  late AnimationController _controller, _controllerCircle,_controllerRotation;
+  late Animation _animation, _animationCircle,_animationRotation;
   late Path _path = Path();
   bool ballThrow = false;
-
+  int score = 0;
+  int ballPenalty = 0;
+  double widthRatio = 0.98;
+  double halfWidthRatio = 0.49;
   @override
   void initState() {
-    _controller = AnimationController(vsync: this,duration: Duration(milliseconds: 1000));
     super.initState();
+    _controller = AnimationController(vsync: this,duration: Duration(milliseconds: 200));
+    _controllerCircle = AnimationController(vsync: this,duration: Duration(milliseconds: 7500));
+    _controllerRotation = AnimationController(vsync: this,duration: Duration(milliseconds: 1500));
+    _animationCircle = Tween(begin: 1.0,end: 0.3).animate(_controllerCircle)
+      ..addListener((){
+        setState(() {
+
+        });
+        _controllerRotation.duration = Duration(milliseconds: (2000 * _animationCircle.value).toInt());
+      });
+
+
     _animation = Tween(begin: 0.0,end: 1.0).animate(_controller)
       ..addListener((){
         setState(() {
         });
       });
+
+    _animationRotation = Tween(begin: -3.14,end: 3.14).animate(_controllerRotation)
+      ..addListener((){
+        setState(() {
+
+        });
+      });
+
+
+    _controllerCircle.forward();
+    _controllerRotation.forward();
     _controller.addStatusListener((status) {
       if(status == AnimationStatus.completed){
         setState(() {
@@ -73,11 +98,27 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
         });
       }
     });
+    _controllerCircle.addStatusListener((status) {
+      if(status == AnimationStatus.completed){
+        _controllerCircle.reset();
+        _controllerCircle.forward();
+        setState(() {
+          score = 0;
+          ballPenalty = 0;
+        });
+      }
+    });
+    _controllerRotation.addStatusListener((status) {
+      if(status == AnimationStatus.completed){
+        _controllerRotation.reset();
+        _controllerRotation.forward();
+      }
+    });
 
 
   }
 
-  void drawPath(originX,originY,destX,destY){
+  void drawPath(originX,originY,double destX,double destY){
     Path path = Path();
     path.moveTo(originX,originY);
     path.lineTo(destX,destY);
@@ -92,11 +133,37 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
       PathMetric pathMetric = pathMetrics.elementAt(0);
       value = pathMetric.length * value;
       Tangent? pos = pathMetric.getTangentForOffset(value);
+      num ballTop = MediaQuery.of(context).size.width * halfWidthRatio + (_animationCircle.value*MediaQuery.of(context).size.width *halfWidthRatio)* sin(_animationRotation.value);
+      num ballLeft = MediaQuery.of(context).size.width * halfWidthRatio  + (_animationCircle.value*MediaQuery.of(context).size.width *halfWidthRatio)* cos(_animationRotation.value);
+      if((pos?.position.dy)! >= ballTop - 15 && (pos?.position.dy)! <= ballTop + 15 && (pos?.position.dx)! >= ballLeft - 15 && (pos?.position.dx)! <= ballLeft + 15){
+          _controllerCircle.reset();
+          _controllerCircle.forward();
+          setState(() {
+            ballThrow = false;
+            score+=1;
+            ballPenalty+=5;
+          });
+          _controllerCircle.duration = Duration(milliseconds: max(7500 - ballPenalty*10,2500));
+          _controller.duration = Duration(milliseconds: min(200 + ballPenalty,500));
+
+      }
+
+
       return pos?.position;
     }
     else{
-      return Offset(MediaQuery.of(context).size.width *0.5,MediaQuery.of(context).size.height *0.5);
+      return Offset(MediaQuery.of(context).size.width *widthRatio,MediaQuery.of(context).size.height *widthRatio);
     }
+  }
+
+  List<double> calculateLineMax(centerX,centerY,posX,posY){
+    List<double> coordinates = [];
+    double angle = atan2(posY-centerY, posX-centerX);
+    double newY = MediaQuery.of(context).size.width *halfWidthRatio + (MediaQuery.of(context).size.width *halfWidthRatio)* sin(angle);
+    double newX = MediaQuery.of(context).size.width *halfWidthRatio + (MediaQuery.of(context).size.width *halfWidthRatio)* cos(angle);
+    coordinates.add(newX);
+    coordinates.add(newY);
+    return coordinates;
   }
 
   @override
@@ -108,11 +175,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+      backgroundColor: Color(0xff073b4c),
       body: Center(
         // Center is a layout widget. It takes a single child and positions it
         // in the middle of the parent.
@@ -137,52 +200,90 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
               onTapDown: (details) {
                 if(!ballThrow) {
                   final tapPosition = details.localPosition;
-                  final x = tapPosition.dx;
-                  final y = tapPosition.dy;
+                  num x = tapPosition.dx;
+                  num y = tapPosition.dy;
                   // print("$x,$y");
                   num centerX = MediaQuery
                       .of(context)
                       .size
-                      .width * 0.25;
+                      .width * halfWidthRatio;
                   num centerY = MediaQuery
                       .of(context)
                       .size
-                      .height * 0.25;
-                  print(
-                      (180 - atan2(centerY - y, centerX - x) * 180 / pi) % 360);
+                      .width * halfWidthRatio;
+                  // print(
+                  //     (180 - atan2(centerY - y, centerX - x) * 180 / pi) % 360);
+                  List<double> coords = calculateLineMax(centerX, centerY, x, y);
                   setState(() {
                     ballThrow = true;
                   });
-                  drawPath(centerX, centerY, x, y);
+                  drawPath(centerX, centerY, coords[0], coords[1]);
                   _controller.reset();
                   _controller.forward();
                 }
               },
               child: SizedBox(
-                width: MediaQuery.of(context).size.width *0.5,
-                height: MediaQuery.of(context).size.height *0.5,
+                width: MediaQuery.of(context).size.width * widthRatio,
+                height: MediaQuery.of(context).size.width * widthRatio,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Colors.orange,
+                    color: Colors.transparent,
                   ),
                   child: Stack(
                     children: [
-                      Positioned(
-                        top: 0,
-                        child: CustomPaint(
-                          painter: PathPainter(_path),
+                      // Positioned(
+                      //   top: 0,
+                      //   child: CustomPaint(
+                      //     painter: PathPainter(_path),
+                      //   ),
+                      // ),
+                      Center(
+                        child: Text(
+                          score.toString(),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                          ),
                         ),
                       ),
+                     Center(
+                       child: Container(
+                        decoration: BoxDecoration(
+                            shape:BoxShape.circle, //making box to circle
+                            color:Colors.transparent ,
+                          border: Border.all(
+                            color: Color(0xffffd166),width: 1.5,
+                          ),
+
+                        ),
+                        height: _animationCircle.value*MediaQuery.of(context).size.width *widthRatio, //value from animation controller
+                        width:  _animationCircle.value*MediaQuery.of(context).size.width *widthRatio, //value from animation controller
+                    ),
+                     ),
+
                       Positioned(
                         top: calculate(_animation.value)?.dy,
                         left: calculate(_animation.value)?.dx,
                         child: Container(
                           decoration: BoxDecoration(
-                              color: Colors.blueAccent,
+                              color: Color(0xff06d6a0),
                               borderRadius: BorderRadius.circular(10)
                           ),
-                          width: 10,
-                          height: 10,
+                          width: 15,
+                          height: 15,
+                        ),
+                      ),
+                      Positioned(
+                        top: MediaQuery.of(context).size.width *halfWidthRatio + (_animationCircle.value*MediaQuery.of(context).size.width *halfWidthRatio)* sin(_animationRotation.value) - 15,
+                        left: MediaQuery.of(context).size.width * halfWidthRatio + (_animationCircle.value*MediaQuery.of(context).size.width *halfWidthRatio) * cos(_animationRotation.value) - 15,
+                        child: Container(
+                          decoration: BoxDecoration(
+                              color: Color(0xffef476f),
+                              shape:BoxShape.circle,
+                          ),
+                          width: 30,
+                          height: 30,
                         ),
                       ),
                     ],
